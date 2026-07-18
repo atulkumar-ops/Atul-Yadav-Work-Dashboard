@@ -916,6 +916,10 @@ function renderLiveSheetSetup(){
             </select>
           </label>
         </div>
+        <div class="checkfield" style="max-width:640px;">
+          <input type="checkbox" id="ldYesOnly" ${cfg.yesOnly!==false?'checked':''}>
+          <label for="ldYesOnly" style="margin:0;">Agar sheet me "New_landing_before_11_am" jaisa Yes/No column ho, to sirf "Yes" rows count karo (No hatao)</label>
+        </div>
         <div class="btn-row">
           <button class="btn primary" onclick="ldConnect()">Connect &amp; Load</button>
           <button class="btn ghost" onclick="ldRefreshNow()">Refresh Now</button>
@@ -925,15 +929,19 @@ function renderLiveSheetSetup(){
     </div>
     <div class="card" id="ldTableCard" style="display:none; margin-top:18px;">
       <div class="stepnum"><span class="dot"></span>Live Data</div>
-      <h2 style="display:flex; align-items:center; gap:10px;">
-        <span id="ldLiveDot" style="width:8px;height:8px;border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulseGlow 1.6s infinite;"></span>
-        Seller × Date Pivot
+      <h2 style="display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap;">
+        <span style="display:flex; align-items:center; gap:10px;">
+          <span id="ldLiveDot" style="width:8px;height:8px;border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulseGlow 1.6s infinite;"></span>
+          Seller × Date Pivot
+        </span>
+        <button class="btn ghost" id="ldDownloadPivot" style="font-size:12px;">⬇ Poori pivot table CSV download</button>
       </h2>
       <div style="overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:10px;">
         <table class="pivot" id="ldTable" style="width:100%;"></table>
       </div>
     </div>
   `;
+  document.getElementById('ldDownloadPivot').onclick = ldDownloadPivotCSV;
   if(cfg.url){ setTimeout(ldConnect, 50); }
 }
 
@@ -959,8 +967,9 @@ function ldConnect(){
   const url = document.getElementById('ldUrl').value.trim();
   const headerRow = parseInt(document.getElementById('ldHeaderRow').value)||1;
   const interval = parseInt(document.getElementById('ldInterval').value)||0;
+  const yesOnly = document.getElementById('ldYesOnly').checked;
   if(!url){ ldSetStatus('Pehle sheet link daalo.', true); return; }
-  ldSaveConfig({url, headerRow, interval});
+  ldSaveConfig({url, headerRow, interval, yesOnly});
   if(ldTimer){ clearInterval(ldTimer); ldTimer = null; }
   if(interval>0){ ldTimer = setInterval(ldRefreshNow, interval); }
   ldRefreshNow();
@@ -981,7 +990,7 @@ function ldRefreshNow(){
       }
       const parsed = Papa.parse(trimmed, {skipEmptyLines:true});
       if(!parsed.data.length){ throw new Error('CSV khaali aaya — sahi tab/gid check karo'); }
-      ldRenderTable(parsed.data, cfg.headerRow||1);
+      ldRenderTable(parsed.data, cfg.headerRow||1, cfg.yesOnly!==false);
       ldSetStatus('Last synced ' + new Date().toLocaleTimeString('en-IN'));
     })
     .catch(err=>{
@@ -1006,16 +1015,26 @@ function ldLooksLikeRawOrders(headers){
   return hasDateCol && hasIdCol && hasSellerId && multiDateCols === 0;
 }
 
-function ldBuildPivotFromRaw(headers, rows, windowDays){
+function ldNormYesNo(v){
+  return (v||'').toString().trim().toLowerCase();
+}
+
+function ldBuildPivotFromRaw(headers, rows, windowDays, yesOnly){
   const dateIdx = ldFindCol(headers, ['orderlandingdate','date']);
   const idIdx = ldFindCol(headers, ['id']);
   const sellerIdIdx = ldFindCol(headers, ['sellerid']);
   const nameIdx = ldFindCol(headers, ['sellername','suppliername','name']);
   const phoneIdx = ldFindCol(headers, ['phone']);
+  const yesNoIdx = ldFindCol(headers, ['newlandingbefore11am','landingbefore11am']);
+
+  let workRows = rows;
+  if(yesOnly && yesNoIdx !== -1){
+    workRows = rows.filter(r => ldNormYesNo(r[yesNoIdx]) === 'yes');
+  }
 
   const sellers = {};
   const allDates = new Set();
-  rows.forEach(r=>{
+  workRows.forEach(r=>{
     const sid = (r[sellerIdIdx]||'').toString().trim();
     if(!sid) return;
     const date = (r[dateIdx]||'').toString().trim();
@@ -1049,7 +1068,9 @@ function ldBuildPivotFromRaw(headers, rows, windowDays){
   return {headers: headerRowOut, rows: bodyRows};
 }
 
-function ldRenderTable(data, headerRow){
+let ldLastHeaders = null, ldLastRows = null;
+
+function ldRenderTable(data, headerRow, yesOnly){
   const card = document.getElementById('ldTableCard');
   const table = document.getElementById('ldTable');
   if(!data || data.length < headerRow){ ldSetStatus('Sheet me data nahi mila.', true); return; }
@@ -1057,10 +1078,13 @@ function ldRenderTable(data, headerRow){
   let rows = data.slice(headerRow).filter(r => r.some(c => (c||'').toString().trim() !== ''));
 
   if(ldLooksLikeRawOrders(headers)){
-    const pivot = ldBuildPivotFromRaw(headers, rows, 7);
+    const pivot = ldBuildPivotFromRaw(headers, rows, 0, yesOnly);
     headers = pivot.headers;
     rows = pivot.rows;
   }
+
+  ldLastHeaders = headers;
+  ldLastRows = rows;
 
   const dateColIdx = headers.map(h => /^\d{4}-\d{2}-\d{2}$/.test((h||'').trim()) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test((h||'').trim()) || (h||'').toString().toLowerCase().includes('grand total'));
   const firstDateIdx = dateColIdx.indexOf(true);
@@ -1078,6 +1102,16 @@ function ldRenderTable(data, headerRow){
 
   table.innerHTML = thead + tbody;
   card.style.display = 'block';
+}
+
+function ldDownloadPivotCSV(){
+  if(!ldLastHeaders || !ldLastRows){ alert('Pehle data load karo.'); return; }
+  const objRows = ldLastRows.map(r => {
+    const obj = {};
+    ldLastHeaders.forEach((h,i)=> obj[h||('col'+i)] = r[i]!==undefined ? r[i] : '');
+    return obj;
+  });
+  downloadCSV('live_sheet_pivot_full.csv', objRows);
 }
 
 const ALL_TAB_IDS = [DASHBOARD_TAB_ID, LIVESHEET_TAB_ID, ...TABS.map(t=>t.id), EXTRA_TAB_ID];
