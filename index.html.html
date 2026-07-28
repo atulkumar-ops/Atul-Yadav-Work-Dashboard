@@ -445,6 +445,20 @@
     color:var(--text-faint); display:flex; align-items:center; gap:8px; margin-bottom:14px;
   }
   .panel-title .sq{width:6px; height:6px; background:var(--amber); box-shadow:0 0 6px var(--amber);}
+
+  /* CityMall dashboard extras */
+  tr.action-row td{
+    background:rgba(224,102,90,0.08) !important;
+    box-shadow:inset 3px 0 0 var(--red);
+  }
+  .remark-none{color:var(--red); font-weight:600; font-size:11.5px;}
+  .remark-ok{color:var(--text); font-size:12px;}
+  .remark-date{color:var(--text-faint); font-family:var(--mono); font-size:10.5px; display:block; margin-top:2px;}
+  .action-badge{
+    display:inline-block; font-family:var(--mono); font-size:9.5px; letter-spacing:0.5px; text-transform:uppercase;
+    color:var(--red); border:1px solid rgba(224,102,90,0.5); background:rgba(224,102,90,0.1);
+    padding:2px 7px; border-radius:10px; margin-left:6px;
+  }
 </style>
 </head>
 <body>
@@ -1114,7 +1128,298 @@ function ldDownloadPivotCSV(){
   downloadCSV('live_sheet_pivot_full.csv', objRows);
 }
 
-const ALL_TAB_IDS = [DASHBOARD_TAB_ID, LIVESHEET_TAB_ID, ...TABS.map(t=>t.id), EXTRA_TAB_ID];
+// --- CityMall dashboard tab: orders pivot + calling remarks join ---
+const CITYMALL_TAB_ID = 'citymall';
+(function setupCityMallTab(){
+  const b = document.createElement('button');
+  b.className = 'tabbtn';
+  b.innerHTML = `<span class="chip"></span>CityMall`;
+  b.onclick = () => switchTab(CITYMALL_TAB_ID);
+  b.id = 'tabbtn-'+CITYMALL_TAB_ID;
+  tabbar.appendChild(b);
+
+  const panel = document.createElement('section');
+  panel.className = 'tabpanel';
+  panel.id = 'panel-'+CITYMALL_TAB_ID;
+  main.appendChild(panel);
+  renderCityMallSetup();
+})();
+
+let cmTimer = null;
+function cmSavedConfig(){
+  try{ return JSON.parse(localStorage.getItem('cm_config')||'{}'); }catch(e){ return {}; }
+}
+function cmSaveConfig(cfg){
+  try{ localStorage.setItem('cm_config', JSON.stringify(cfg)); }catch(e){}
+}
+
+function renderCityMallSetup(){
+  const panel = document.getElementById('panel-'+CITYMALL_TAB_ID);
+  const cfg = cmSavedConfig();
+  panel.innerHTML = `
+    <div class="card">
+      <div class="stepnum"><span class="dot"></span>CityMall Live Dashboard</div>
+      <h2>Orders sheet + Calling sheet connect karo</h2>
+      <p class="hint">
+        Dono Google Sheets me <b>Share → Anyone with the link → Viewer</b> karke normal edit/share link paste karo.
+        Orders sheet me "citymall" tab ka link, aur calling sheet me apni daily calling wali tab ka link.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; max-width:680px;">
+        <label style="font-size:11.5px; color:var(--text-faint); font-family:var(--mono);">CityMall orders sheet link</label>
+        <input id="cmOrdersUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/XXXXXXXX/edit#gid=0"
+          value="${cfg.ordersUrl ? cfg.ordersUrl.replace(/"/g,'&quot;') : ''}"
+          style="background:var(--panel-raised); border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--text); font-family:var(--mono); font-size:12.5px;">
+
+        <label style="font-size:11.5px; color:var(--text-faint); font-family:var(--mono); margin-top:6px;">Calling remarks sheet link</label>
+        <input id="cmCallingUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/YYYYYYYY/edit#gid=0"
+          value="${cfg.callingUrl ? cfg.callingUrl.replace(/"/g,'&quot;') : ''}"
+          style="background:var(--panel-raised); border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--text); font-family:var(--mono); font-size:12.5px;">
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:4px;">
+          <label style="font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+            Orders header row
+            <input id="cmOrdersHeaderRow" type="number" min="1" value="${cfg.ordersHeaderRow||1}" style="width:56px; background:var(--panel-raised); border:1px solid var(--line); border-radius:6px; padding:6px 8px; color:var(--text); font-family:var(--mono);">
+          </label>
+          <label style="font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+            Calling header row
+            <input id="cmCallingHeaderRow" type="number" min="1" value="${cfg.callingHeaderRow||1}" style="width:56px; background:var(--panel-raised); border:1px solid var(--line); border-radius:6px; padding:6px 8px; color:var(--text); font-family:var(--mono);">
+          </label>
+          <label style="font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+            Auto-refresh
+            <select id="cmInterval" style="background:var(--panel-raised); border:1px solid var(--line); border-radius:6px; padding:6px 8px; color:var(--text); font-family:var(--mono);">
+              <option value="0">Off</option>
+              <option value="15000" ${cfg.interval==15000?'selected':''}>Every 15s</option>
+              <option value="30000" ${(!cfg.interval || cfg.interval==30000)?'selected':''}>Every 30s</option>
+              <option value="60000" ${cfg.interval==60000?'selected':''}>Every 1 min</option>
+              <option value="300000" ${cfg.interval==300000?'selected':''}>Every 5 min</option>
+            </select>
+          </label>
+        </div>
+        <div class="checkfield" style="max-width:680px;">
+          <input type="checkbox" id="cmYesOnly" ${cfg.yesOnly!==false?'checked':''}>
+          <label for="cmYesOnly" style="margin:0;">Agar "New_landing_before_11_am" jaisa Yes/No column ho, sirf "Yes" rows count karo</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" onclick="cmConnect()">Connect &amp; Load</button>
+          <button class="btn ghost" onclick="cmRefreshNow()">Refresh Now</button>
+        </div>
+        <div id="cmStatus" style="font-family:var(--mono); font-size:11.5px; color:var(--text-faint);"></div>
+      </div>
+    </div>
+    <div class="card" id="cmTableCard" style="display:none; margin-top:18px;">
+      <div class="stepnum"><span class="dot"></span>Live Data</div>
+      <h2 style="display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap;">
+        <span style="display:flex; align-items:center; gap:10px;">
+          <span style="width:8px;height:8px;border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulseGlow 1.6s infinite;"></span>
+          CityMall Seller Pivot + Calling Status
+        </span>
+        <button class="btn ghost" id="cmDownloadPivot" style="font-size:12px;">⬇ Poori table CSV download</button>
+      </h2>
+      <p class="hint" style="margin-bottom:12px;">
+        <span class="action-badge">action</span> highlighted rows = pending latest ${'&'} pichle 2 dinon me order aaya hai aur turant calling/action chahiye.
+      </p>
+      <div style="overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:10px;">
+        <table class="pivot" id="cmTable" style="width:100%;"></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('cmDownloadPivot').onclick = cmDownloadCSV;
+  if(cfg.ordersUrl && cfg.callingUrl){ setTimeout(cmConnect, 50); }
+}
+
+function cmSetStatus(msg, isErr){
+  const el = document.getElementById('cmStatus');
+  if(el){ el.textContent = msg; el.style.color = isErr ? 'var(--red)' : 'var(--text-faint)'; }
+}
+
+function cmConnect(){
+  const ordersUrl = document.getElementById('cmOrdersUrl').value.trim();
+  const callingUrl = document.getElementById('cmCallingUrl').value.trim();
+  const ordersHeaderRow = parseInt(document.getElementById('cmOrdersHeaderRow').value)||1;
+  const callingHeaderRow = parseInt(document.getElementById('cmCallingHeaderRow').value)||1;
+  const interval = parseInt(document.getElementById('cmInterval').value)||0;
+  const yesOnly = document.getElementById('cmYesOnly').checked;
+  if(!ordersUrl || !callingUrl){ cmSetStatus('Dono sheet links (orders + calling) daalo.', true); return; }
+  cmSaveConfig({ordersUrl, callingUrl, ordersHeaderRow, callingHeaderRow, interval, yesOnly});
+  if(cmTimer){ clearInterval(cmTimer); cmTimer = null; }
+  if(interval>0){ cmTimer = setInterval(cmRefreshNow, interval); }
+  cmRefreshNow();
+}
+
+function cmFetchCsv(url){
+  const finalUrl = ldNormalizeUrl(url);
+  const bust = (finalUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
+  return fetch(finalUrl + bust).then(r=>{
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.text();
+  }).then(text=>{
+    const trimmed = text.trim();
+    if(trimmed.startsWith('<') || trimmed.toLowerCase().includes('<!doctype html') || trimmed.includes('accounts.google.com')){
+      throw new Error('Sheet private hai ya sharing sahi nahi hai');
+    }
+    const parsed = Papa.parse(trimmed, {skipEmptyLines:true});
+    if(!parsed.data.length) throw new Error('CSV khaali aaya');
+    return parsed.data;
+  });
+}
+
+function cmRefreshNow(){
+  const cfg = cmSavedConfig();
+  if(!cfg.ordersUrl || !cfg.callingUrl){ cmSetStatus('Pehle Connect & Load dabao.', true); return; }
+  cmSetStatus('Syncing...');
+  Promise.all([cmFetchCsv(cfg.ordersUrl), cmFetchCsv(cfg.callingUrl)])
+    .then(([ordersData, callingData])=>{
+      const ordersHeaders = ordersData[(cfg.ordersHeaderRow||1)-1];
+      const ordersRows = ordersData.slice(cfg.ordersHeaderRow||1).filter(r => r.some(c => (c||'').toString().trim() !== ''));
+      const callingHeaders = callingData[(cfg.callingHeaderRow||1)-1];
+      const callingRows = callingData.slice(cfg.callingHeaderRow||1).filter(r => r.some(c => (c||'').toString().trim() !== ''));
+
+      const pivot = cmBuildPivot(ordersHeaders, ordersRows, callingHeaders, callingRows, cfg.yesOnly!==false);
+      cmRenderTable(pivot);
+      cmSetStatus('Last synced ' + new Date().toLocaleTimeString('en-IN'));
+    })
+    .catch(err=>{
+      cmSetStatus('Sync failed: ' + err.message + '. Dono sheets "Anyone with the link" par set karo.', true);
+    });
+}
+
+function cmBuildCallingMap(callingHeaders, callingRows){
+  const sellerIdIdx = ldFindCol(callingHeaders, ['sellerid']);
+  const remarkIdx = ldFindCol(callingHeaders, ['callingremark','remark','status','callstatus']);
+  const dateIdx = ldFindCol(callingHeaders, ['callingdate','calldate','date']);
+  const map = {};
+  callingRows.forEach(r=>{
+    const sid = (r[sellerIdIdx]||'').toString().trim();
+    if(!sid) return;
+    const remark = remarkIdx!==-1 ? (r[remarkIdx]||'').toString().trim() : '';
+    const date = dateIdx!==-1 ? (r[dateIdx]||'').toString().trim() : '';
+    if(!map[sid]) map[sid] = [];
+    map[sid].push({remark, date});
+  });
+  // sort each seller's calls by date descending, latest first
+  Object.keys(map).forEach(sid=>{
+    map[sid].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  });
+  return map;
+}
+
+function cmBuildPivot(headers, rows, callingHeaders, callingRows, yesOnly){
+  const dateIdx = ldFindCol(headers, ['orderlandingdate','date']);
+  const idIdx = ldFindCol(headers, ['id']);
+  const sellerIdIdx = ldFindCol(headers, ['sellerid']);
+  const nameIdx = ldFindCol(headers, ['sellername','suppliername','name']);
+  const phoneIdx = ldFindCol(headers, ['phone']);
+  const yesNoIdx = ldFindCol(headers, ['newlandingbefore11am','landingbefore11am']);
+
+  let workRows = rows;
+  if(yesOnly && yesNoIdx !== -1){
+    workRows = rows.filter(r => ldNormYesNo(r[yesNoIdx]) === 'yes');
+  }
+
+  const sellers = {};
+  const allDates = new Set();
+  workRows.forEach(r=>{
+    const sid = (r[sellerIdIdx]||'').toString().trim();
+    if(!sid) return;
+    const date = (r[dateIdx]||'').toString().trim();
+    const oid = (r[idIdx]||'').toString().trim();
+    if(!sellers[sid]) sellers[sid] = {name:r[nameIdx]||'', phone:r[phoneIdx]||'', dateIds:{}, allIds:new Set()};
+    if(date){ allDates.add(date); if(!sellers[sid].dateIds[date]) sellers[sid].dateIds[date] = new Set(); sellers[sid].dateIds[date].add(oid); }
+    sellers[sid].allIds.add(oid);
+  });
+
+  const sortedDates = Array.from(allDates).sort();
+  const recentWindow = sortedDates.slice(-3); // latest date + 2 days back
+
+  const callingMap = cmBuildCallingMap(callingHeaders, callingRows);
+
+  const headerRowOut = ['seller_id','supplier_name','Seller Phone no', ...sortedDates, 'Grand Total', 'Calling Remark'];
+  const sids = Object.keys(sellers).sort((a,b)=>Number(a)-Number(b));
+  const bodyRows = sids.map(sid=>{
+    const s = sellers[sid];
+    const row = [sid, s.name, s.phone];
+    sortedDates.forEach(d=> row.push(s.dateIds[d] ? s.dateIds[d].size : ''));
+    row.push(s.allIds.size);
+
+    const calls = callingMap[sid];
+    let remarkCell;
+    if(!calls || !calls.length){
+      remarkCell = {none:true};
+    } else {
+      remarkCell = {none:false, remark:calls[0].remark || '(remark khaali hai)', date:calls[0].date};
+    }
+    row.push(remarkCell);
+
+    const needsAction = recentWindow.some(d => s.dateIds[d] && s.dateIds[d].size > 0);
+    return {cells:row, needsAction};
+  });
+
+  const totals = ['Grand Total','',''];
+  sortedDates.forEach(d=>{
+    let sum = 0;
+    Object.values(sellers).forEach(s=>{ if(s.dateIds[d]) sum += s.dateIds[d].size; });
+    totals.push(sum);
+  });
+  let grandAll = 0; Object.values(sellers).forEach(s=> grandAll += s.allIds.size);
+  totals.push(grandAll);
+  totals.push({none:true, isTotalRow:true});
+  bodyRows.push({cells:totals, needsAction:false});
+
+  return {headers: headerRowOut, rows: bodyRows, dateCount: sortedDates.length};
+}
+
+let cmLastHeaders = null, cmLastRows = null;
+
+function cmRenderTable(pivot){
+  const card = document.getElementById('cmTableCard');
+  const table = document.getElementById('cmTable');
+  const headers = pivot.headers;
+  cmLastHeaders = headers;
+  cmLastRows = pivot.rows;
+
+  const rightAlignFrom = 3; // date columns + grand total start right after seller_id/name/phone
+
+  let thead = '<thead><tr>' + headers.map((h,i)=>`<th${i>=rightAlignFrom && i<headers.length-1?' style="text-align:right;"':''}>${h||''}</th>`).join('') + '</tr></thead>';
+  let tbody = '<tbody>' + pivot.rows.map(row=>{
+    const r = row.cells;
+    const isGrand = (r[0]||'').toString().toLowerCase().includes('grand total');
+    const rowClass = (row.needsAction && !isGrand) ? 'action-row' : (isGrand ? 'totalrow' : '');
+    const cellsHtml = r.map((v,i)=>{
+      if(i === headers.length-1){
+        // calling remark cell
+        if(v && v.isTotalRow) return '<td></td>';
+        if(!v || v.none) return `<td><span class="remark-none">Calling nahi hui hai</span></td>`;
+        return `<td><span class="remark-ok">${v.remark}</span>${v.date?`<span class="remark-date">${v.date}</span>`:''}</td>`;
+      }
+      const align = (i>=rightAlignFrom) ? ' class="num"' : '';
+      return `<td${align}>${v!==undefined?v:''}</td>`;
+    }).join('');
+    return `<tr class="${rowClass}">${cellsHtml}${(row.needsAction && !isGrand)?'':''}</tr>`;
+  }).join('') + '</tbody>';
+
+  table.innerHTML = thead + tbody;
+  card.style.display = 'block';
+}
+
+function cmDownloadCSV(){
+  if(!cmLastHeaders || !cmLastRows){ alert('Pehle data load karo.'); return; }
+  const objRows = cmLastRows.map(row=>{
+    const obj = {};
+    cmLastHeaders.forEach((h,i)=>{
+      const v = row.cells[i];
+      if(i === cmLastHeaders.length-1){
+        obj[h||'calling_remark'] = (!v || v.none) ? 'Calling nahi hui hai' : `${v.remark}${v.date?' ('+v.date+')':''}`;
+      } else {
+        obj[h||('col'+i)] = v!==undefined ? v : '';
+      }
+    });
+    return obj;
+  });
+  downloadCSV('citymall_pivot_with_calling.csv', objRows);
+}
+
+
+const ALL_TAB_IDS = [DASHBOARD_TAB_ID, LIVESHEET_TAB_ID, CITYMALL_TAB_ID, ...TABS.map(t=>t.id), EXTRA_TAB_ID];
 function switchTab(id){
   ALL_TAB_IDS.forEach(tid=>{
     document.getElementById('panel-'+tid).classList.toggle('active', tid===id);
