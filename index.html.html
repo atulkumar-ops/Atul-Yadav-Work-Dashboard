@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -476,7 +476,7 @@
       <div class="sub">Azad · DS · CDC &nbsp;/&nbsp; daily dispatch cross-check</div>
     </div>
   </div>
-  <div class="clock">Sab kuch is browser me hi process hota hai<br><b>Koi file kahin upload nahi hoti — 100% local</b></div>
+  <div class="clock">Everything runs entirely in this browser<br><b>No file is ever uploaded anywhere — 100% local</b></div>
 </header>
 
 <nav class="tabbar" id="tabbar"></nav>
@@ -593,7 +593,7 @@ function toCSV(rows){
 }
 function downloadCSV(filename, rows){
   const csv = toCSV(rows);
-  if(!csv){ alert('Download karne ke liye koi data nahi hai.'); return; }
+  if(!csv){ alert('No data to download.'); return; }
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -906,9 +906,9 @@ function renderLiveSheetSetup(){
       <div class="stepnum"><span class="dot"></span>Live Google Sheet</div>
       <h2>Connect a published Google Sheet</h2>
       <p class="hint">
-        Google Sheet me: <b>Share</b> button → <b>General access</b> ko <b>"Anyone with the link"</b> (Viewer) par set karo → link copy karo → neeche paste karo.
-        Normal edit/share link paste karna hai, publish-to-web karne ki zaroorat nahi — hum khud sahi CSV format me convert kar lenge.
-        Sheet update hote hi ye dashboard automatically refresh hoke naya data dikhayega.
+        On your Google Sheet: click <b>Share</b> → set <b>General access</b> to <b>"Anyone with the link"</b> (Viewer) → copy the link → paste it below.
+        Paste the normal edit/share link — no need to "Publish to web", we'll convert it to the right CSV format automatically.
+        As soon as the sheet updates, this dashboard will refresh and show the new data automatically.
       </p>
       <div style="display:flex; flex-direction:column; gap:10px; max-width:640px;">
         <input id="ldUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/XXXXXXXX/edit#gid=0"
@@ -932,7 +932,7 @@ function renderLiveSheetSetup(){
         </div>
         <div class="checkfield" style="max-width:640px;">
           <input type="checkbox" id="ldYesOnly" ${cfg.yesOnly!==false?'checked':''}>
-          <label for="ldYesOnly" style="margin:0;">Agar sheet me "New_landing_before_11_am" jaisa Yes/No column ho, to sirf "Yes" rows count karo (No hatao)</label>
+          <label for="ldYesOnly" style="margin:0;">If the sheet has a Yes/No column like "New_landing_before_11_am", count only "Yes" rows (exclude No)</label>
         </div>
         <div class="btn-row">
           <button class="btn primary" onclick="ldConnect()">Connect &amp; Load</button>
@@ -948,7 +948,7 @@ function renderLiveSheetSetup(){
           <span id="ldLiveDot" style="width:8px;height:8px;border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulseGlow 1.6s infinite;"></span>
           Seller × Date Pivot
         </span>
-        <button class="btn ghost" id="ldDownloadPivot" style="font-size:12px;">⬇ Poori pivot table CSV download</button>
+        <button class="btn ghost" id="ldDownloadPivot" style="font-size:12px;">⬇ Download full pivot table CSV</button>
       </h2>
       <div style="overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:10px;">
         <table class="pivot" id="ldTable" style="width:100%;"></table>
@@ -982,7 +982,7 @@ function ldConnect(){
   const headerRow = parseInt(document.getElementById('ldHeaderRow').value)||1;
   const interval = parseInt(document.getElementById('ldInterval').value)||0;
   const yesOnly = document.getElementById('ldYesOnly').checked;
-  if(!url){ ldSetStatus('Pehle sheet link daalo.', true); return; }
+  if(!url){ ldSetStatus('Enter the sheet link first.', true); return; }
   ldSaveConfig({url, headerRow, interval, yesOnly});
   if(ldTimer){ clearInterval(ldTimer); ldTimer = null; }
   if(interval>0){ ldTimer = setInterval(ldRefreshNow, interval); }
@@ -991,7 +991,7 @@ function ldConnect(){
 
 function ldRefreshNow(){
   const cfg = ldSavedConfig();
-  if(!cfg.url){ ldSetStatus('Pehle Connect & Load dabao.', true); return; }
+  if(!cfg.url){ ldSetStatus('Click Connect & Load first.', true); return; }
   ldSetStatus('Syncing...');
   const finalUrl = ldNormalizeUrl(cfg.url);
   const bust = (finalUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
@@ -1000,15 +1000,15 @@ function ldRefreshNow(){
     .then(text=>{
       const trimmed = text.trim();
       if(trimmed.startsWith('<') || trimmed.includes('accounts.google.com') || trimmed.toLowerCase().includes('<!doctype html')){
-        throw new Error('Sheet private hai ya sharing "Anyone with the link" par set nahi hai');
+        throw new Error('The sheet is private, or sharing is not set to "Anyone with the link"');
       }
       const parsed = Papa.parse(trimmed, {skipEmptyLines:true});
-      if(!parsed.data.length){ throw new Error('CSV khaali aaya — sahi tab/gid check karo'); }
+      if(!parsed.data.length){ throw new Error('The CSV came back empty — check the tab/gid'); }
       ldRenderTable(parsed.data, cfg.headerRow||1, cfg.yesOnly!==false);
       ldSetStatus('Last synced ' + new Date().toLocaleTimeString('en-IN'));
     })
     .catch(err=>{
-      ldSetStatus('Sync failed: ' + err.message + '. Sheet ko "Share → Anyone with the link → Viewer" karo, ya normal share/edit link hi paste karo — hum khud sahi format bana lenge.', true);
+      ldSetStatus('Sync failed: ' + err.message + '. Set the sheet to "Share → Anyone with the link → Viewer", or just paste the normal share/edit link — we\'ll convert it to the right format automatically.', true);
     });
 }
 
@@ -1087,7 +1087,7 @@ let ldLastHeaders = null, ldLastRows = null;
 function ldRenderTable(data, headerRow, yesOnly){
   const card = document.getElementById('ldTableCard');
   const table = document.getElementById('ldTable');
-  if(!data || data.length < headerRow){ ldSetStatus('Sheet me data nahi mila.', true); return; }
+  if(!data || data.length < headerRow){ ldSetStatus('No data found in the sheet.', true); return; }
   let headers = data[headerRow-1];
   let rows = data.slice(headerRow).filter(r => r.some(c => (c||'').toString().trim() !== ''));
 
@@ -1119,7 +1119,7 @@ function ldRenderTable(data, headerRow, yesOnly){
 }
 
 function ldDownloadPivotCSV(){
-  if(!ldLastHeaders || !ldLastRows){ alert('Pehle data load karo.'); return; }
+  if(!ldLastHeaders || !ldLastRows){ alert('Load the data first.'); return; }
   const objRows = ldLastRows.map(r => {
     const obj = {};
     ldLastHeaders.forEach((h,i)=> obj[h||('col'+i)] = r[i]!==undefined ? r[i] : '');
@@ -1159,10 +1159,10 @@ function renderCityMallSetup(){
   panel.innerHTML = `
     <div class="card">
       <div class="stepnum"><span class="dot"></span>CityMall Live Dashboard</div>
-      <h2>Orders sheet + Calling sheet connect karo</h2>
+      <h2>Connect orders sheet + calling sheet</h2>
       <p class="hint">
-        Dono Google Sheets me <b>Share → Anyone with the link → Viewer</b> karke normal edit/share link paste karo.
-        Orders sheet me "citymall" tab ka link, aur calling sheet me apni daily calling wali tab ka link.
+        On both Google Sheets: <b>Share → Anyone with the link → Viewer</b>, then paste the normal edit/share link.
+        Use the "citymall" tab link for the orders sheet, and your daily calling tab link for the calling sheet.
       </p>
       <div style="display:flex; flex-direction:column; gap:10px; max-width:680px;">
         <label style="font-size:11.5px; color:var(--text-faint); font-family:var(--mono);">CityMall orders sheet link</label>
@@ -1197,7 +1197,7 @@ function renderCityMallSetup(){
         </div>
         <div class="checkfield" style="max-width:680px;">
           <input type="checkbox" id="cmYesOnly" ${cfg.yesOnly!==false?'checked':''}>
-          <label for="cmYesOnly" style="margin:0;">Agar "New_landing_before_11_am" jaisa Yes/No column ho, sirf "Yes" rows count karo</label>
+          <label for="cmYesOnly" style="margin:0;">If there's a Yes/No column like "New_landing_before_11_am", count only "Yes" rows</label>
         </div>
         <div class="btn-row">
           <button class="btn primary" onclick="cmConnect()">Connect &amp; Load</button>
@@ -1213,10 +1213,10 @@ function renderCityMallSetup(){
           <span style="width:8px;height:8px;border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulseGlow 1.6s infinite;"></span>
           CityMall Seller Pivot + Calling Status
         </span>
-        <button class="btn ghost" id="cmDownloadPivot" style="font-size:12px;">⬇ Poori table CSV download</button>
+        <button class="btn ghost" id="cmDownloadPivot" style="font-size:12px;">⬇ Download full table CSV</button>
       </h2>
       <p class="hint" style="margin-bottom:12px;">
-        <span class="action-badge">action</span> highlighted rows = pending latest ${'&'} pichle 2 dinon me order aaya hai aur turant calling/action chahiye.
+        <span class="action-badge">action</span> highlighted rows = a pending order arrived within the latest date ${'&'} the 2 days before it, so it needs immediate calling/action.
       </p>
       <div style="overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:10px;">
         <table class="pivot" id="cmTable" style="width:100%;"></table>
@@ -1239,7 +1239,7 @@ function cmConnect(){
   const callingHeaderRow = parseInt(document.getElementById('cmCallingHeaderRow').value)||1;
   const interval = parseInt(document.getElementById('cmInterval').value)||0;
   const yesOnly = document.getElementById('cmYesOnly').checked;
-  if(!ordersUrl || !callingUrl){ cmSetStatus('Dono sheet links (orders + calling) daalo.', true); return; }
+  if(!ordersUrl || !callingUrl){ cmSetStatus('Enter both sheet links (orders + calling).', true); return; }
   cmSaveConfig({ordersUrl, callingUrl, ordersHeaderRow, callingHeaderRow, interval, yesOnly});
   if(cmTimer){ clearInterval(cmTimer); cmTimer = null; }
   if(interval>0){ cmTimer = setInterval(cmRefreshNow, interval); }
@@ -1255,17 +1255,17 @@ function cmFetchCsv(url){
   }).then(text=>{
     const trimmed = text.trim();
     if(trimmed.startsWith('<') || trimmed.toLowerCase().includes('<!doctype html') || trimmed.includes('accounts.google.com')){
-      throw new Error('Sheet private hai ya sharing sahi nahi hai');
+      throw new Error('The sheet is private or sharing is not set correctly');
     }
     const parsed = Papa.parse(trimmed, {skipEmptyLines:true});
-    if(!parsed.data.length) throw new Error('CSV khaali aaya');
+    if(!parsed.data.length) throw new Error('The CSV came back empty');
     return parsed.data;
   });
 }
 
 function cmRefreshNow(){
   const cfg = cmSavedConfig();
-  if(!cfg.ordersUrl || !cfg.callingUrl){ cmSetStatus('Pehle Connect & Load dabao.', true); return; }
+  if(!cfg.ordersUrl || !cfg.callingUrl){ cmSetStatus('Click Connect & Load first.', true); return; }
   cmSetStatus('Syncing...');
   Promise.all([cmFetchCsv(cfg.ordersUrl), cmFetchCsv(cfg.callingUrl)])
     .then(([ordersData, callingData])=>{
@@ -1279,7 +1279,7 @@ function cmRefreshNow(){
       cmSetStatus('Last synced ' + new Date().toLocaleTimeString('en-IN'));
     })
     .catch(err=>{
-      cmSetStatus('Sync failed: ' + err.message + '. Dono sheets "Anyone with the link" par set karo.', true);
+      cmSetStatus('Sync failed: ' + err.message + '. Set both sheets to "Anyone with the link".', true);
     });
 }
 
@@ -1346,7 +1346,7 @@ function cmBuildPivot(headers, rows, callingHeaders, callingRows, yesOnly){
     if(!calls || !calls.length){
       remarkCell = {none:true};
     } else {
-      remarkCell = {none:false, remark:calls[0].remark || '(remark khaali hai)', date:calls[0].date};
+      remarkCell = {none:false, remark:calls[0].remark || '(remark is empty)', date:calls[0].date};
     }
     row.push(remarkCell);
 
@@ -1388,7 +1388,7 @@ function cmRenderTable(pivot){
       if(i === headers.length-1){
         // calling remark cell
         if(v && v.isTotalRow) return '<td></td>';
-        if(!v || v.none) return `<td><span class="remark-none">Calling nahi hui hai</span></td>`;
+        if(!v || v.none) return `<td><span class="remark-none">Not called yet</span></td>`;
         return `<td><span class="remark-ok">${v.remark}</span>${v.date?`<span class="remark-date">${v.date}</span>`:''}</td>`;
       }
       const align = (i>=rightAlignFrom) ? ' class="num"' : '';
@@ -1402,13 +1402,13 @@ function cmRenderTable(pivot){
 }
 
 function cmDownloadCSV(){
-  if(!cmLastHeaders || !cmLastRows){ alert('Pehle data load karo.'); return; }
+  if(!cmLastHeaders || !cmLastRows){ alert('Load the data first.'); return; }
   const objRows = cmLastRows.map(row=>{
     const obj = {};
     cmLastHeaders.forEach((h,i)=>{
       const v = row.cells[i];
       if(i === cmLastHeaders.length-1){
-        obj[h||'calling_remark'] = (!v || v.none) ? 'Calling nahi hui hai' : `${v.remark}${v.date?' ('+v.date+')':''}`;
+        obj[h||'calling_remark'] = (!v || v.none) ? 'Not called yet' : `${v.remark}${v.date?' ('+v.date+')':''}`;
       } else {
         obj[h||('col'+i)] = v!==undefined ? v : '';
       }
@@ -1435,11 +1435,11 @@ function renderPanel(t){
 
     <div class="card">
       <div class="stepnum"><span class="dot"></span>Step 1</div>
-      <h2>${t.file1.label} upload karo</h2>
+      <h2>Upload ${t.file1.label}</h2>
       <p class="hint">Columns expected: ${t.file1.hint}</p>
       <div class="dropzone" id="dz1-${t.id}">
         <input type="file" accept=".csv" id="file1-${t.id}">
-        <div class="dz-title">Click karo ya CSV yahan drop karo</div>
+        <div class="dz-title">Click or drop your CSV here</div>
         <div class="dz-sub">.csv files only</div>
       </div>
       <div class="filestatus" id="fstatus1-${t.id}">
@@ -1448,34 +1448,34 @@ function renderPanel(t){
 
       <div class="controls-row" id="controls1-${t.id}" style="display:none;">
         <div class="field" id="latestInfo-${t.id}" style="min-width:220px;">
-          <label>Latest date (file me)</label>
+          <label>Latest date (in file)</label>
           <div style="font-family:var(--mono); font-size:13px; padding:9px 0; color:var(--amber); font-weight:700;" id="latestDateVal-${t.id}">—</div>
         </div>
         <div class="checkfield">
           <input type="checkbox" id="yesOnly-${t.id}" checked>
-          <label for="yesOnly-${t.id}">Latest date par sirf "Yes" rakho (No hata do)</label>
+          <label for="yesOnly-${t.id}">Keep only "Yes" for the latest date (exclude No)</label>
         </div>
-        <button class="btn primary" id="genBtn-${t.id}">Sabhi dates ke order ID ek saath banao</button>
+        <button class="btn primary" id="genBtn-${t.id}">Generate order IDs for all dates</button>
       </div>
-      <p class="hint" style="margin-top:10px; margin-bottom:0;">Purani (latest se pehle wali) dates ka poora data automatically shamil hoga — sirf latest date par Yes/No filter lagega.</p>
+      <p class="hint" style="margin-top:10px; margin-bottom:0;">All older dates (before the latest one) are included in full automatically — the Yes/No filter only applies to the latest date.</p>
 
       <div id="step1result-${t.id}"></div>
     </div>
 
     <div class="card">
       <div class="stepnum"><span class="dot"></span>Step 2</div>
-      <h2>${t.file2.label} upload karo — match &amp; filter</h2>
+      <h2>Upload ${t.file2.label} — match &amp; filter</h2>
       <p class="hint">Columns expected: ${t.file2.hint}. Status filter: <b>${t.statuses.join(', ')}</b></p>
       <div class="dropzone" id="dz2-${t.id}">
         <input type="file" accept=".csv" id="file2-${t.id}">
-        <div class="dz-title">Click karo ya CSV yahan drop karo</div>
+        <div class="dz-title">Click or drop your CSV here</div>
         <div class="dz-sub">.csv files only</div>
       </div>
       <div class="filestatus" id="fstatus2-${t.id}">
         <span class="fname"></span><span class="frows"></span>
       </div>
       <div class="btn-row" id="controls2-${t.id}" style="display:none;">
-        <button class="btn primary" id="matchBtn-${t.id}">Match &amp; Analyse karo</button>
+        <button class="btn primary" id="matchBtn-${t.id}">Match &amp; Analyse</button>
       </div>
       <div id="step2result-${t.id}"></div>
     </div>
@@ -1514,7 +1514,7 @@ function handleFile1(t, file){
   const s = state[t.id];
   parseCSVFile(file, rows=>{
     if(!rows.length || !(t.file1.dateCol in rows[0])){
-      alert(`"${t.file1.label}" me expected column "${t.file1.dateCol}" nahi mili. Sahi file check karo.`);
+      alert(`Expected column "${t.file1.dateCol}" not found in "${t.file1.label}". Please check the file.`);
       return;
     }
     s.file1Rows = rows; s.file1Name = file.name;
@@ -1541,7 +1541,7 @@ function handleFile2(t, file){
   const s = state[t.id];
   parseCSVFile(file, rows=>{
     if(!rows.length || !(t.file2.orderIdCol in rows[0])){
-      alert(`"${t.file2.label}" me expected column "${t.file2.orderIdCol}" nahi mili. Sahi file check karo.`);
+      alert(`Expected column "${t.file2.orderIdCol}" not found in "${t.file2.label}". Please check the file.`);
       return;
     }
     s.file2Rows = rows; s.file2Name = file.name;
@@ -1573,7 +1573,7 @@ function generateOrderIdList(t){
 
   const box = document.getElementById(`step1result-${t.id}`);
   if(!ids.length){
-    box.innerHTML = `<div class="empty">Koi order ID nahi mili. "Latest date par sirf Yes" option check karo.</div>`;
+    box.innerHTML = `<div class="empty">No order IDs found. Check the "Keep only Yes for latest date" option.</div>`;
     return;
   }
 
@@ -1587,7 +1587,7 @@ function generateOrderIdList(t){
 
   box.innerHTML = `
     <div class="resultbar">
-      <div class="statcard"><div class="n">${ids.length}</div><div class="l">Order IDs (sabhi dates)</div></div>
+      <div class="statcard"><div class="n">${ids.length}</div><div class="l">Order IDs (all dates)</div></div>
       <div class="statcard"><div class="n">${s.dateOptions.length}</div><div class="l">Dates cover ki</div></div>
       <div class="statcard"><div class="n">${latestDate}</div><div class="l">Latest date</div></div>
     </div>
@@ -1601,7 +1601,7 @@ function generateOrderIdList(t){
     <div class="btn-row">
       <button class="btn" id="copyBtn-${t.id}">📋 Copy list</button>
       <button class="btn" id="dlIds-${t.id}">⬇ Order ID CSV download</button>
-      <button class="btn ghost" id="dlFiltered-${t.id}">⬇ Poori filtered rows CSV</button>
+      <button class="btn ghost" id="dlFiltered-${t.id}">⬇ Download all filtered rows CSV</button>
     </div>
   `;
   document.getElementById(`copyBtn-${t.id}`).onclick = ()=>{
@@ -1616,8 +1616,8 @@ function generateOrderIdList(t){
 
 function matchAndAnalyse(t){
   const s = state[t.id];
-  if(!s.filteredOrderIds.length){ alert('Pehle Step 1 me order ID list banao.'); return; }
-  if(!s.file2Rows){ alert(`Pehle "${t.file2.label}" file upload karo.`); return; }
+  if(!s.filteredOrderIds.length){ alert('Please generate the order ID list in Step 1 first.'); return; }
+  if(!s.file2Rows){ alert(`Please upload the "${t.file2.label}" file first.`); return; }
 
   // build lookup map from file2, keyed by cleaned order id
   const map = {};
@@ -1696,7 +1696,7 @@ function renderStep2Result(t){
   const matched = s.matchedRows, pivotMap = s.pivot, notFound = s.notFound, statuses = s.wantedStatuses;
   const box = document.getElementById(`step2result-${t.id}`);
   if(!matched || !matched.length){
-    const empty0 = `<div class="empty">Status filter (${(statuses||[]).join(', ')}) ke liye koi matched data nahi mila.</div>`;
+    const empty0 = `<div class="empty">No matched data found for status filter (${(statuses||[]).join(', ')}).</div>`;
     box.innerHTML = matched ? `<div class="resultbar">
       <div class="statcard"><div class="n">${s.filteredOrderIds.length}</div><div class="l">IDs searched</div></div>
       <div class="statcard"><div class="n">0</div><div class="l">Matched rows</div></div>
@@ -1789,7 +1789,7 @@ function renderStep2Result(t){
     ${statuses.map(st=>`<button class="chip ${s.statusFilter===st?'active':''}" onclick="setStatusFilter('${t.id}','${st}')">${st} (${totals[st]||0})</button>`).join('')}
   `;
 
-  const detailTableHtml = pageData.length===0 ? `<div class="empty">Search/filter ke liye koi record nahi mila.</div>` : `
+  const detailTableHtml = pageData.length===0 ? `<div class="empty">No records found for this search/filter.</div>` : `
     <div class="tablewrap" style="max-height:420px;">
       <table class="pivot">
         <thead><tr><th>#</th>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
@@ -1844,7 +1844,7 @@ function renderStep2Result(t){
     <div class="toolsrow">
       <div class="searchbox">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" placeholder="Order ID, seller, AWB, customer... search karo" value="${s.search||''}" oninput="setSearch('${t.id}', this.value)">
+        <input type="text" placeholder="Search Order ID, seller, AWB, customer..." value="${s.search||''}" oninput="setSearch('${t.id}', this.value)">
       </div>
       <div class="chipbar">${chipbarHtml}</div>
     </div>
@@ -1870,7 +1870,7 @@ function renderStep2Result(t){
     const foundSet = new Set(matched.map(r=>r.matched_order_id));
     const allFile2Ids = new Set((s.file2Rows||[]).map(r=>cleanId(r[t.file2.orderIdCol])));
     const nf = s.filteredOrderIds.filter(id=> !allFile2Ids.has(id));
-    if(!nf.length){ alert('Koi bhi order ID "not found" nahi hai.'); return; }
+    if(!nf.length){ alert('There are no "not found" order IDs.'); return; }
     downloadCSV(`${t.id}_not_found_ids.csv`, nf.map(id=>({order_id:id})));
   };
 }
